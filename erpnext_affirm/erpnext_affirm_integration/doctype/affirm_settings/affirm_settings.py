@@ -87,7 +87,7 @@ class AffirmSettings(Document):
 @frappe.whitelist(allow_guest=1)
 def affirm_callback(checkout_token, reference_doctype, reference_docname):
 
-	frappe.log("""[AFFIRM] Affirm callback request: 
+	frappe.log("""[AFFIRM] Affirm callback request:
 		checkout_token: {0}
 		reference_doctype: {1}
 		reference_docname: {2}
@@ -303,6 +303,8 @@ def capture_payment(affirm_id, sales_order):
 		payment_entry.reference_no = affirm_data.get("transaction_id")
 		payment_entry.reference_date = getdate(affirm_data.get("created"))
 		payment_entry.submit()
+
+		frappe.db.set_value("Sales Order", sales_order, "authorize_delivery", True)
 	else:
 		frappe.throw("Something went wrong.")
 
