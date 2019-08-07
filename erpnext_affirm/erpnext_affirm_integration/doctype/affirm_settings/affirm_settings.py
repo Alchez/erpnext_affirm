@@ -58,6 +58,24 @@ from six.moves.urllib.parse import urlencode
 from requests.auth import HTTPBasicAuth
 from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 
+
+def call_hook(hook_name, **kwargs):
+	hooks = frappe.get_hooks(hook_name) or []
+	for hook in hooks:
+		# don't allow hooks to break processing
+		try:
+			frappe.call(hook, **kwargs)
+		except Exception:
+			# Hook inception, pass exception to hook listening for exception reporting(sentry)
+			error_hooks = frappe.get_hooks("error_capture_log") or []
+			if len(error_hooks) > 0:
+				for error_hook in error_hooks:
+					frappe.call(error_hook, async=True)
+			else:
+				log("Error calling hook method: {}->{}".format(hook_name, hook))
+				log(frappe.get_traceback())
+
+
 class AffirmSettings(Document):
 	service_name = "Affirm"
 	is_embedable = True
@@ -304,7 +322,8 @@ def capture_payment(affirm_id, sales_order):
 		payment_entry.reference_date = getdate(affirm_data.get("created"))
 		payment_entry.submit()
 
-		frappe.db.set_value("Sales Order", sales_order, "authorize_delivery", True)
+		# let other apps do work after payment is captured
+		call_hook("affirm_on_payment_capture_success", order=sales_order)
 	else:
 		frappe.throw("Something went wrong.")
 
